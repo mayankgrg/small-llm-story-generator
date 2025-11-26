@@ -155,9 +155,6 @@ def seq_collate_fn(batch):
     return padded
 
 
-################################################################################
-# 3. K-gram MLP in a sequence-to-sequence approach
-################################################################################
 
 def compute_next_token_loss(logits, tokens):
     """
@@ -176,107 +173,6 @@ def compute_next_token_loss(logits, tokens):
     gold = gold.reshape(-1)
     return F.cross_entropy(preds, gold)
 
-
-class KGramMLPSeqModel(nn.Module):
-    def __init__(self, vocab_size, k=3, embed_size=512, num_inner_layers=1, hidden_dim=None, chunk_size = 1):
-        super().__init__()
-        self.k = k
-        self.vocab_size = vocab_size
-        self.embed_size = embed_size
-        self.num_inner_layers = num_inner_layers
-        self.chunk_size = chunk_size
-        self.use_cache = False # this is for kv cache which should not be applicable here.
-
-        self.embedding = nn.Embedding(vocab_size, embed_size)
-
-
-        if hidden_dim is None:
-            hidden_dim = embed_size // 2
-
-
-        layers = [nn.Linear(k * embed_size, hidden_dim), nn.GELU()]
-        for _ in range(num_inner_layers - 1):
-            layers += [nn.Linear(hidden_dim, hidden_dim), nn.GELU()]
-        layers.append(nn.Linear(hidden_dim, vocab_size))
-
-        self.net = nn.Sequential(*layers)
-
-        if hidden_dim is None:
-            hidden_dim = embed_size // 2
-
-
-        layers = [nn.Linear(k * embed_size, hidden_dim), nn.GELU()]
-        for _ in range(num_inner_layers - 1):
-            layers += [nn.Linear(hidden_dim, hidden_dim), nn.GELU()]
-        layers.append(nn.Linear(hidden_dim, vocab_size))
-
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, tokens_seq, use_cache=False):
-        """
-        tokens_seq: (seq_len, batch)
-        Return: (seq_len, batch, vocab_size)
-        """
-        seq_len, batch_size = tokens_seq.shape
-        device = tokens_seq.device
- 
-        pad = torch.zeros(self.k - 1, batch_size, dtype=torch.long, device=device)
-        padded = torch.cat([pad, tokens_seq], dim=0)  
- 
-        context_windows = []
-        for i in range(self.k):
-            context_windows.append(padded[i:i + seq_len])
-        contexts = torch.stack(context_windows, dim=2)   
-        embedded = self.embedding(contexts)  
-        flat = embedded.reshape(seq_len, batch_size, self.k * self.embed_size)
-
-        
-        
-        chunks = torch.split(flat, self.chunk_size, dim=0)
-        
-        logit_chunks = []
-        for chunk in chunks:
-            logit_chunk = self.net(chunk) 
-            logit_chunks.append(logit_chunk)
-            
-        logits = torch.cat(logit_chunks, dim=0)
-         
-        return logits
-
-
-################################################################################
-# 4. LSTM-based seq2seq
-################################################################################
-
-class LSTMSeqModel(nn.Module):
-    def __init__(self, vocab_size, embed_size=1024, hidden_size=1024, num_layers=1):
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.embed_size = embed_size
-        self.hidden_size = hidden_size
-        self.use_cache = False
-
-        self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.lstm = nn.LSTM(
-            input_size=embed_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            dropout=0.2,
-            batch_first=True
-        )
-
-        self.linear = nn.Linear(hidden_size, vocab_size)
-
-    def forward(self, tokens_seq, use_cache=False):
-        """
-        tokens_seq: (seq_len, batch)
-        => (seq_len, batch, vocab_size)
-        """
-        emb = self.embedding(tokens_seq.T)   # (seq_len, batch, embed)
-        self.lstm.flatten_parameters()
-        out, _ = self.lstm(emb)           # (seq_len, batch, hidden)
-        logits = self.linear(out)         # (seq_len, batch, vocab_size)
-        return logits.transpose(0, 1)
 
 
 ################################################################################
@@ -387,41 +283,6 @@ class TransformerBlock(nn.Module):
 
         return x, new_kv_cache
 
-
-class TransformerModel(nn.Module):
-    def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4, mlp_g_hidden_layer_output=2048, max_seq_len=1024, use_kv_cache=False, use_rope=False):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, d_model)
-        self.position_embedding = nn.Embedding(max_seq_len, d_model)
-
-        self.blocks = nn.ModuleList([TransformerBlock(vocab_size, d_model, n_heads, mlp_g_hidden_layer_output, use_rope) for i in range(n_blocks)])
-        self.unembedding = nn.Linear(d_model, vocab_size)
-        self.kv_cache = [None] * n_blocks
-        self.use_cache = use_kv_cache
-        self.use_rope = use_rope
-
-        pass
-
-    def forward(self, tokens_seq, use_cache=False):
-        x = self.embedding(tokens_seq)
-
-        if use_cache and self.kv_cache[0] is not None:
-            pass
-        else:
-            if use_cache:
-                self.kv_cache = [None] * len(self.blocks)
-
-        for i in range(len(self.blocks)):
-            kv_cache_layer_i = self.kv_cache[i] if use_cache else None
-            x, new_kv_cache = self.blocks[i](x, kv_cache_layer_i)
-            self.kv_cache[i] = new_kv_cache
-
-        logits = self.unembedding(x)
-
-        return logits
-
-    def reset_cache(self):
-        self.kv_cache = [None] * len(self.blocks)
 
 
 ################################################################################
