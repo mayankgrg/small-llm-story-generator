@@ -26,23 +26,8 @@ pico-llm/
 ├── pico-llm.py               # Main training script
 ├── KgramCNN.py               # CNN-based k-gram encoder
 ├── kgramMLP.py               # MLP-based k-gram encoder
-│
-├── data/
-│   ├── dataset_loader.py     # Loads and tokenizes text
-│   └── sample_text.txt       # Sample dataset
-│
-├── models/
-│   ├── __init__.py
-│   ├── transformer_block.py  # Optional transformer experiments
-│   └── utils.py              # Shared functions (loss, initialization, etc.)
-│
-├── training/
-│   ├── trainer.py            # Epoch loop, batching, evaluation
-│   └── metrics.py            # Perplexity, accuracy, loss curves
-│
-├── experiments/
-│   ├── config.json           # Model hyperparameters
-│   └── results/              # Logs and checkpoints
+│── LSTM.py                   # LSTM model
+|── Transformer.py            # Transformer model
 │
 └── README.md                 # Project documentation
 ```
@@ -113,38 +98,6 @@ The framework generates:
 * perplexity curves
 * generated text samples
 
----
-
-## 🧩 Example Architecture Diagram
-
-```
-                +---------------------------+
-                |       Dataset Loader      |
-                +--------------+------------+
-                               |
-                               v
-                    +----------+----------+
-                    |   Token Processor   |
-                    +----------+----------+
-                               |
-                    +----------v----------+
-                    |   K-gram Builder   |
-                    +----------+----------+
-                               |
-            +------------------v------------------+
-            |       Encoder Module (Choose)       |
-            |  - KgramCNN                         |
-            |  - KgramMLP                         |
-            +------------------+------------------+
-                               |
-                      +--------v--------+
-                      |   LLM Head      |
-                      +--------+--------+
-                               |
-                        +------v------+
-                        |   Trainer   |
-                        +-------------+
-```
 
 ---
 
@@ -160,9 +113,3 @@ The framework generates:
 ## 🤝 Contributing
 
 Pull requests are welcome. Please open an issue for major changes.
-
----
-
-## 📜 License
-
-MIT License.
